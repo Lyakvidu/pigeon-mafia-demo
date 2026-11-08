@@ -465,18 +465,26 @@
   function draw() {
     const {p,cat,sweeper,people,birds,meals,time}=round;
     scene.frame(ctx,reducedMotion?0:time);
-    shadow(home.x,home.y,27);
-    ART.draw(ctx,'nest',home.x,home.y+2);
-    if(round.food>0) ART.draw(ctx,'fries',home.x-2,home.y-3);
-    if(round.food>1) ART.draw(ctx,'fries',home.x+4,home.y-3);
+    drawJobGround();
     const flash=Math.floor(time*3)%2;
-    if(round.carrying || !round.moved) diamond(home.x,home.y-19-flash,'#ffdc83');
     if(round.target) diamond(round.target.x,round.target.y,'#f9d9a0');
     paintOrder.length=0;
     for(const o of cache) paintOrder.push(o);
+    // Every standing object shares the actors' ground-contact depth, including job props.
+    queueJobObjects();
+    paintOrder.push({x:home.x,y:home.y,nest:true});
     for(const a of people) paintOrder.push({y:a.y,person:a});
     for(const b of birds) paintOrder.push({y:b.y,bird:b});
     paintOrder.push({y:p.y,player:p},{y:sweeper.y,guard:sweeper},{y:cat.y,cat});
+    // Contact shadows belong to the pavement, never over another sprite.
+    shadow(home.x,home.y,27);
+    for(const a of people) shadow(a.x,a.y,13);
+    for(const b of birds) shadow(b.x,b.y,13);
+    shadow(p.x,p.y,18);shadow(sweeper.x,sweeper.y,19);shadow(cat.x,cat.y,19);
+    for(const item of paintOrder) {
+      if(item.shadowWidth) shadow(item.x,item.y,item.shadowWidth);
+      if(item.rival) shadow(item.rival.x,item.rival.y,17);
+    }
     paintOrder.sort((a,b)=>a.y-b.y);
     for(const item of paintOrder) {
       if(item.image) {
@@ -485,47 +493,56 @@
           ART.draw(ctx,'fries',item.x-3,item.y-12);
           if(flash && !round.carrying && between(p,item)<55) rect('#fff4b4',item.x+5,item.y-24,2,2);
         }
+      } else if(item.jobObject) {
+        DISTRICTS.drawObject(ctx,item.jobObject,item.x,item.drawY??item.y,item.options);
+      } else if(item.nest) {
+        drawNest();
+      } else if(item.rival) {
+        const r=item.rival;
+        ART.draw(ctx,'ally',r.x,r.y,{variant:2,frame:Math.floor(time*11),flip:r.flip});
+        sign(r.x,r.y-26,'!');
       } else if(item.person) {
         const a=item.person;
-        shadow(a.x,a.y,13);
         ART.draw(ctx,currentPose(a)||'person',a.x,a.y,{frame:a.moving?Math.floor(time*8):0,flip:a.flip,variant:a.variant});
         if(a.distracted) sign(a.x,a.y-39,'+');
         else if(round.time<(a.anger||0)) sign(a.x,a.y-39,'!');
       } else if(item.bird) {
         const b=item.bird;
         const flying=currentPose(b)==='flap';
-        shadow(b.x,b.y,13);
         ART.draw(ctx,flying?'flap':'ally',b.x,b.y-(flying?6:0),{frame:Math.floor(time*(b.moving?11:2)),flip:b.flip,variant:b.variant});
         if(!b.recruited && between(b,p)<HEARING && flash) sign(b.x,b.y-24,'+');
       } else if(item.player) {
         const excited=sweeper.mode==='chase' || cat.mode==='leap';
         const pose=currentPose(p)||(p.moving?(excited&&Math.floor(time*10)%3===0?'flap':'walk'):'pigeon');
-        shadow(p.x,p.y,18);
         ART.draw(ctx,pose,p.x,p.y,{frame:Math.floor(time*12),flip:p.flip});
-        if(round.carrying) {
-          const cargoX=p.x+(p.flip?-10:10);
-          if(['courier','distraction','finale','wind'].includes(mission.mode)) DISTRICTS.drawObject(ctx,mission.mode==='wind'?'twig':'parcel',cargoX,p.y-7);
-          else ART.draw(ctx,'fries',cargoX,p.y-7);
-        }
+        if(round.carrying) drawCargo(p,pose);
         rect('#4b4660',p.x-3,p.y+4,7,2);
         rect('#94e2b1',p.x-2,p.y+4,5,1);
       } else if(item.guard) {
         const g=sweeper, chasing=g.mode==='chase';
-        shadow(g.x,g.y,19);
         ART.draw(ctx,chasing?'chase':'sweeper',g.x,g.y,{frame:g.moving?Math.floor(time*(chasing?12:6)):0,flip:g.flip});
         if(g.mode!=='patrol') sign(g.x,g.y-42,'!');
       } else {
         const leap=cat.mode==='leap', crouch=cat.mode==='crouch';
-        shadow(cat.x,cat.y,19);
         ART.draw(ctx,leap||crouch?'pounce':'cat',cat.x,cat.y-(leap?5:0),{frame:Math.floor(time*(cat.moving?10:2)),flip:cat.flip});
         if(leap||crouch) sign(cat.x,cat.y-24,'!');
       }
     }
-    drawJob();
+    if(round.carrying || !round.moved) diamond(home.x,home.y-19-flash,'#ffdc83');
     for(const f of round.particles) {
       if(f.type==='feather') ART.draw(ctx,'feather',f.x,f.y);
       else rect(f.type==='gold'?'#ffdc83':'#efbd8b',f.x,f.y,f.age<.2?3:2,2);
     }
+  }
+  function drawCargo(p,pose) {
+    // The carried item follows the beak and stays in the player's depth group.
+    const parcel=['courier','distraction','finale'].includes(mission.mode);
+    const twig=mission.mode==='wind',peck=pose==='peck';
+    const beakX=p.x+(p.flip?-1:1)*(peck?10:12);
+    const beakY=p.y-(peck?3:14)-(pose==='walk'?Math.floor(round.time*12)%2:pose==='alarm'?2:0);
+    const cargoX=beakX+(p.flip?-1:1)*(parcel?8:twig?7:6);
+    if(parcel||twig) DISTRICTS.drawObject(ctx,twig?'twig':'parcel',cargoX,beakY+(twig?2:6));
+    else ART.draw(ctx,'fries',cargoX,beakY+5);
   }
   function setupJob() {
     const mode=mission.mode;
@@ -719,28 +736,39 @@
     ability.textContent=cooldown?T('ВЗЛЁТ')+' '+cooldown:T('ВЗЛЁТ');
     if(round.time>=round.messageUntil&&mission.mode!=='steal') ui.tip.textContent=T(jobHint());
   }
-  function drawJob() {
+  function drawJobGround() {
     const {job,time}=round,mode=mission.mode;
     if(kit.scout) {
       const g=round.sweeper;
       ctx.save();ctx.globalAlpha=.13;ctx.fillStyle='#fff0ad';
       ctx.beginPath();ctx.moveTo(g.x,g.y);ctx.arc(g.x,g.y,68,g.angle-.7,g.angle+.7);ctx.closePath();ctx.fill();ctx.restore();
     }
-    if(mode==='territory') for(const f of job.flags) DISTRICTS.drawObject(ctx,'flag',f.x,f.y,{friendly:f.done,progress:f.progress});
-    if(mode==='rescue'||mode==='finale') DISTRICTS.drawObject(ctx,'cage',job.cage.x,job.cage.y,{open:job.cage.open,progress:job.cage.hits/3});
-    if(mode==='finale') DISTRICTS.drawObject(ctx,'sign',job.lever.x,job.lever.y,{friendly:job.lever.open});
-    if(job.token&&!job.token.taken) DISTRICTS.drawObject(ctx,mode==='wind'?'twig':'parcel',job.token.x,job.token.y-6);
     if(['courier','wind','escort','lure'].includes(mode)) for(const marker of job.markers) {
       if(!marker.done) diamond(marker.x,marker.y,'#8fd0bc');
       else rect('#8fd0bc',marker.x-4,marker.y,8,2);
     }
-    if(mode==='quiet') DISTRICTS.drawObject(ctx,'sign',176,125,{friendly:time%8<3});
-    if(mission.district==='market') DISTRICTS.drawObject(ctx,'cart',job.cart.x,job.cart.y);
-    if(hasRival()) {
-      const r=job.rival;shadow(r.x,r.y,17);
-      ART.draw(ctx,'ally',r.x,r.y,{variant:2,frame:Math.floor(time*11),flip:r.flip});
-      sign(r.x,r.y-26,'!');
+  }
+  function queueJobObjects() {
+    const {job,time}=round,mode=mission.mode;
+    const add=(jobObject,position,options={},shadowWidth=0)=>paintOrder.push({...position,jobObject,options,shadowWidth});
+    if(mode==='territory') for(const f of job.flags) add('flag',f,{friendly:f.done,progress:f.progress},17);
+    if(mode==='rescue'||mode==='finale') add('cage',job.cage,{open:job.cage.open},34);
+    if(mode==='finale') add('sign',job.lever,{friendly:job.lever.open},8);
+    if(job.token&&!job.token.taken) {
+      // A parcel on a table inherits that table's foot depth, not its raised artwork Y.
+      const table=mode==='distraction'?scene.tables[0]:mode==='finale'?scene.tables[2]:null;
+      add(mode==='wind'?'twig':'parcel',{
+        x:job.token.x,y:table?table.y:job.token.y,drawY:table?table.y-12:job.token.y
+      },{},table?0:mode==='wind'?12:16);
     }
+    if(mode==='quiet') add('sign',{x:176,y:125},{friendly:time%8<3},8);
+    if(mission.district==='market') add('cart',job.cart,{},30);
+    if(hasRival()) paintOrder.push({y:job.rival.y,rival:job.rival});
+  }
+  function drawNest() {
+    ART.draw(ctx,'nest',home.x,home.y+2);
+    if(round.food>0) ART.draw(ctx,'fries',home.x-2,home.y-3);
+    if(round.food>1) ART.draw(ctx,'fries',home.x+4,home.y-3);
     if(kit.nest>0) {
       rect('#d6b16b',home.x-13,home.y+3,26,2);
       for(let i=0;i<kit.nest;i++) rect('#f3dfb6',home.x-6+i*7,home.y-6,4,3);
