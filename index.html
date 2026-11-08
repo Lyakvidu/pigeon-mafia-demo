@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161b2c">
+<title>Голубиная мафия — Операция «Картошка фри»</title>
+<link rel="stylesheet" href="game.css">
+<script defer src="scenery.js"></script>
+<script defer src="sprites.js"></script>
+<script defer src="game.js"></script>
+</head>
+<body>
+<main class="cabinet">
+  <header class="masthead">
+    <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" shape-rendering="crispEdges"><path fill="#ffdc7b" d="M2 16h2v-5h2V8h7v2h2V6h2V4h4v2h2v4h-3v5h-2v3H8v2H2z"/><path fill="#212539" d="M19 6h2v2h-2zM6 11h6v2H6zM10 13h5v2h-5z"/><path fill="#ef8354" d="M8 18h2v3H8zm6 0h2v3h-2z"/></svg></div>
+    <div><p class="series">ДЕЛО № 01 · ПЛОЩАДЬ ВОКЗАЛЬНАЯ</p><h1>Голубиная мафия</h1></div>
+    <button id="restart" class="restart" aria-label="Начать заново" title="Заново (R)">↻</button>
+  </header>
+  <section class="hud" aria-label="Задание">
+    <span class="mission">Операция «Картошка фри»</span>
+    <output id="loot" aria-label="Картошка в гнезде">▱ 0/2</output>
+    <output id="danger">ТИХО</output>
+  </section>
+  <div class="stage">
+    <canvas id="square" width="320" height="346" aria-label="Игровая площадь. Касание задаёт путь голубю."></canvas>
+    <div class="tip" id="tip" role="status"></div>
+    <section id="result" class="result" hidden>
+      <p id="result-label"></p>
+      <h2 id="result-title"></h2>
+      <p id="result-text"></p>
+      <button id="again" type="button">↻ Ещё налёт</button>
+    </section>
+  </div>
+  <section class="panel" aria-label="Управление">
+    <div class="pad-area">
+      <div id="joystick" class="stick" role="group" aria-label="Джойстик движения">
+        <svg viewBox="0 0 96 96" aria-hidden="true"><path d="M48 7 56 17H40ZM48 89 56 79H40ZM7 48 17 40v16ZM89 48 79 40v16Z"/></svg>
+        <div class="thumb"></div>
+      </div>
+      <span>ХОД</span>
+    </div>
+    <div class="keys">
+      <button id="call" type="button" class="command call"><svg viewBox="0 0 24 20" aria-hidden="true"><path d="M1 10h3V7h3V5h5v3H9v3H6v4H1zM12 11h3V8h3V6h4v3h-2v3h-3v4h-5z"/></svg><b>СТАЯ</b><small id="flock-label">РЯДОМ С ГОЛУБЕМ</small></button>
+      <button id="action" type="button" class="command action"><svg viewBox="0 0 24 20" aria-hidden="true"><path d="M1 9h5V6h5V3h8v3h4v3h-7v3H9v3H4v2H1z"/><path class="cut" d="M15 5h2v2h-2z"/></svg><b id="action-label">КЛЮНУТЬ</b><small>ПРОБЕЛ / E</small></button>
+    </div>
+  </section>
+  <p class="legend"><span class="desktop">WASD / стрелки / мышь · Q — стая · R — повтор</span><span class="mobile">Джойстик или касание площади · ↻ — повтор</span></p>
+</main>
+</body>
+</html>

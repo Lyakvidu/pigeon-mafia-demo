@@ -1,0 +1,81 @@
+:root {
+  color-scheme: dark;
+  font-family: 'Arial Narrow', Arial, sans-serif;
+  background: #161b2c;
+  color: #fff0bd;
+  font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-width: 270px;
+  min-height: 100dvh;
+  background-color: #161b2c;
+  background-image: radial-gradient(ellipse at 50% -10%, #38314a 0%, transparent 60%), repeating-linear-gradient(135deg, transparent 0 17px, #1b2032 17px 18px);
+  overscroll-behavior: none;
+}
+button { color: inherit; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button:focus-visible { outline: 2px solid #fff0bd; outline-offset: 3px; }
+.cabinet {
+  --deck-width: min(100%, 488px, calc((100dvh - 217px - var(--safe-top) - var(--safe-bottom)) * .925));
+  width: var(--deck-width);
+  margin: auto;
+  padding: calc(9px + var(--safe-top)) 0 calc(6px + var(--safe-bottom));
+  user-select: none;
+  -webkit-user-select: none;
+}
+.masthead { height: 54px; display: flex; align-items: center; gap: 9px; padding: 0 4px 5px; }
+.mark { display: grid; place-items: center; flex: 0 0 34px; height: 34px; background: #393449; border: 2px solid #89655e; transform: rotate(-5deg); box-shadow: 2px 2px #111626; }
+.mark svg { width: 26px; height: 26px; }
+.series { margin: 0 0 3px; font-size: 8px; font-weight: 900; letter-spacing: .11em; color: #efae77; }
+h1 { margin: 0; font-size: clamp(19px, 6vw, 28px); line-height: .98; letter-spacing: -.035em; font-weight: 1000; color: #ffe69e; text-shadow: 2px 2px #7b424b, 3px 4px #141727; }
+.restart { margin-left: auto; flex: 0 0 43px; height: 43px; border: 1px solid #887060; border-bottom-width: 3px; background: #292c40; font-size: 25px; line-height: 1; }
+.hud { height: 31px; padding: 0 6px; display: flex; align-items: center; justify-content: space-between; gap: 4px; border-block: 2px solid #87705d; background: #25283a; color: #ffe3a5; font-weight: 900; font-size: 11px; }
+.mission { white-space: nowrap; letter-spacing: -.025em; }
+.hud output { flex: none; white-space: nowrap; }
+#loot { color: #ffd071; font-size: 13px; }
+#loot.carrying { color: #fff2bf; }
+#danger { min-width: 53px; text-align: right; font-size: 9px; letter-spacing: .05em; color: #9cdec0; }
+#danger.alert { color: #ff9375; }
+.stage { position: relative; background: #2b2c44; box-shadow: 0 0 0 2px #111725, 0 8px 24px #111725aa; }
+canvas { display: block; width: 100%; height: auto; aspect-ratio: 320/346; image-rendering: pixelated; touch-action: none; }
+.tip { position: absolute; inset: auto 5px 4px; min-height: 21px; padding: 5px 6px 4px; background: #202136e8; border-left: 3px solid #f3ae63; color: #fff4c4; text-align: center; font-size: 10px; line-height: 1.15; font-weight: 800; pointer-events: none; }
+.panel { height: 105px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 7px; padding: 3px 8px 5px; border: 1px solid #66596b; border-bottom: 3px solid #433b53; background: repeating-linear-gradient(0deg, #2b2d42 0 3px, #303247 3px 4px); box-shadow: inset 0 2px #414157; }
+.pad-area { display: flex; align-items: center; flex-direction: column; gap: 2px; color: #e0b98e; font-size: 8px; font-weight: 900; letter-spacing: .17em; }
+.stick { position: relative; width: 75px; height: 75px; touch-action: none; border-radius: 50%; border: 3px solid #54516c; background: #1c2033; box-shadow: inset 0 0 0 3px #151929, 0 2px #191d30; }
+.stick svg { display: block; width: 100%; height: 100%; fill: #8e7f98; pointer-events: none; }
+.thumb { position: absolute; left: 50%; top: 50%; width: 33px; height: 33px; margin: -16.5px; border-radius: 50%; background: #ed9c67; border: 3px solid #ffc787; box-shadow: 0 3px #7a414b, inset 0 -4px #c26759; transform: translate(var(--dx,0px), var(--dy,0px)); pointer-events: none; }
+.keys { display: flex; align-items: center; gap: 7px; }
+.command { width: clamp(69px, 22vw, 104px); min-height: 70px; display: grid; justify-items: center; align-content: center; gap: 3px; border: 2px solid #d5ab76; border-bottom: 5px solid #795447; background: #e5ab63; color: #251b2b; box-shadow: 2px 3px #161a2b; touch-action: manipulation; }
+.command svg { width: 25px; height: 18px; fill: currentColor; shape-rendering: crispEdges; }
+.command .cut { fill: #e5ab63; }
+.command b { font-weight: 1000; font-size: 12px; line-height: 1; }
+.command small { white-space: nowrap; font-weight: 900; font-size: 7px; }
+.command.call { background: #524c65; color: #f0d6b8; border-color: #9585a0; border-bottom-color: #302d44; }
+.command.call.ready { background: #80ba9b; color: #202c35; border-color: #afe1ba; border-bottom-color: #455f63; }
+.command.action.ready { background: #ffe091; border-color: #fff0ac; border-bottom-color: #bc7850; }
+.command:active, .restart:active { transform: translateY(2px); }
+.legend { text-align: center; margin: 6px 0 0; color: #ccbac3; font-size: 9px; font-weight: 700; }
+.mobile { display: none; }
+.result { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 8px; padding: 18px; text-align: center; background: #1a1b2de0; }
+.result[hidden] { display: none; }
+.result p { margin: 0; color: #ffe3aa; font-weight: 800; font-size: 12px; }
+#result-label { font-size: 10px; letter-spacing: .2em; color: #f1a372; }
+.result h2 { font-size: clamp(28px, 8vw, 43px); margin: 0; line-height: .9; font-weight: 1000; color: #ffeaa6; text-shadow: 3px 3px #9b4e58; }
+.result button { background: #eab573; color: #261d30; border: 2px solid #ffe2a0; border-bottom: 5px solid #995747; min-height: 44px; padding: 0 18px; margin-top: 5px; font-weight: 1000; }
+@media (pointer: coarse) { .desktop { display: none; } .mobile { display: inline; } }
+@media (max-width: 520px) and (orientation: portrait) {
+  .cabinet { width: min(calc(100% - 14px), max(270px, var(--deck-width))); }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .cabinet { width: min(100% - 20px, 690px); display: grid; grid-template-columns: minmax(150px, calc((100dvh - 16px) * .925)) minmax(170px, 270px); align-content: center; justify-content: center; gap: 3px 12px; min-height: 100dvh; }
+  .stage { grid-column: 1; grid-row: 1 / 6; }
+  .masthead, .hud, .panel, .legend { grid-column: 2; }
+  .masthead { height: 53px; }
+  h1 { font-size: 21px; }
+  .panel { margin-top: 4px; }
+  .command { width: 72px; }
+}
