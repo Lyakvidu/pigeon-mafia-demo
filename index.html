@@ -3,49 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#161b2c">
-<title>Голубиная мафия — Операция «Картошка фри»</title>
-<link rel="stylesheet" href="game.css">
+<meta name="theme-color" content="#1b2031">
+<title>Голубиная мафия — Картошка фри</title>
+<link rel="preload" href="assets/pixelify.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="game.css?v=2">
 <script defer src="scenery.js"></script>
 <script defer src="sprites.js"></script>
-<script defer src="game.js"></script>
+<script defer src="audio.js?v=2"></script>
+<script defer src="game.js?v=2"></script>
+<script defer src="interface.js?v=2"></script>
 </head>
 <body>
-<main class="cabinet">
-  <header class="masthead">
-    <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" shape-rendering="crispEdges"><path fill="#ffdc7b" d="M2 16h2v-5h2V8h7v2h2V6h2V4h4v2h2v4h-3v5h-2v3H8v2H2z"/><path fill="#212539" d="M19 6h2v2h-2zM6 11h6v2H6zM10 13h5v2h-5z"/><path fill="#ef8354" d="M8 18h2v3H8zm6 0h2v3h-2z"/></svg></div>
-    <div><p class="series">ДЕЛО № 01 · ПЛОЩАДЬ ВОКЗАЛЬНАЯ</p><h1>Голубиная мафия</h1></div>
-    <button id="restart" class="restart" aria-label="Начать заново" title="Заново (R)">↻</button>
-  </header>
-  <section class="hud" aria-label="Задание">
-    <span class="mission">Операция «Картошка фри»</span>
-    <output id="loot" aria-label="Картошка в гнезде">▱ 0/2</output>
-    <output id="danger">ТИХО</output>
-  </section>
-  <div class="stage">
-    <canvas id="square" width="320" height="346" aria-label="Игровая площадь. Касание задаёт путь голубю."></canvas>
-    <div class="tip" id="tip" role="status"></div>
-    <section id="result" class="result" hidden>
-      <p id="result-label"></p>
-      <h2 id="result-title"></h2>
-      <p id="result-text"></p>
-      <button id="again" type="button">↻ Ещё налёт</button>
-    </section>
-  </div>
-  <section class="panel" aria-label="Управление">
-    <div class="pad-area">
-      <div id="joystick" class="stick" role="group" aria-label="Джойстик движения">
-        <svg viewBox="0 0 96 96" aria-hidden="true"><path d="M48 7 56 17H40ZM48 89 56 79H40ZM7 48 17 40v16ZM89 48 79 40v16Z"/></svg>
-        <div class="thumb"></div>
+<main id="app" data-screen="menu">
+  <section id="game-screen" class="game-screen" aria-label="Операция «Картошка фри»" hidden inert>
+    <div class="playfield">
+      <header class="hud">
+        <div class="mission"><span>ОПЕРАЦИЯ 01</span><strong>КАРТОШКА ФРИ</strong></div>
+        <div class="stash"><canvas data-art="fries" width="20" height="18" aria-hidden="true"></canvas><output id="loot" aria-label="Картошка в гнезде">0/2</output></div>
+        <button id="pause" class="pause" aria-label="Пауза" title="Пауза (Esc)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h4v12H3zm6 0h4v12H9z"/></svg></button>
+      </header>
+      <div class="stage">
+        <canvas id="square" width="320" height="346" aria-label="Игровая площадь. Касание задаёт путь голубю."></canvas>
+        <output id="danger" class="danger">ТИХО</output>
+        <section id="result" class="result" hidden aria-labelledby="result-title">
+          <canvas id="result-art" width="120" height="50" aria-hidden="true"></canvas>
+          <p id="result-label"></p><h2 id="result-title"></h2><p id="result-text"></p>
+          <button id="again" class="menu-item primary">Ещё налёт</button>
+          <button id="result-menu" class="menu-item">В главное меню</button>
+        </section>
       </div>
-      <span>ХОД</span>
+      <div class="tip-line"><span class="tip-pip" aria-hidden="true">›</span><p id="tip" role="status"></p></div>
     </div>
-    <div class="keys">
-      <button id="call" type="button" class="command call"><svg viewBox="0 0 24 20" aria-hidden="true"><path d="M1 10h3V7h3V5h5v3H9v3H6v4H1zM12 11h3V8h3V6h4v3h-2v3h-3v4h-5z"/></svg><b>СТАЯ</b><small id="flock-label">РЯДОМ С ГОЛУБЕМ</small></button>
-      <button id="action" type="button" class="command action"><svg viewBox="0 0 24 20" aria-hidden="true"><path d="M1 9h5V6h5V3h8v3h4v3h-7v3H9v3H4v2H1z"/><path class="cut" d="M15 5h2v2h-2z"/></svg><b id="action-label">КЛЮНУТЬ</b><small>ПРОБЕЛ / E</small></button>
-    </div>
+    <section class="controls" aria-label="Управление">
+      <div id="joystick" class="stick" role="group" aria-label="Джойстик движения">
+        <svg viewBox="0 0 96 96" aria-hidden="true"><path d="M48 5 54 12H42ZM48 91 54 84H42ZM5 48 12 42v12ZM91 48 84 42v12Z"/></svg><div class="thumb"></div>
+      </div>
+      <div class="keys">
+        <div class="action-group"><button id="call" class="command call" aria-label="Позвать стаю"><canvas data-art="ally" width="32" height="24" aria-hidden="true"></canvas><b>СТАЯ</b></button><small id="flock-label">ПОЗВАТЬ</small></div>
+        <div class="action-group"><button id="action" class="command action"><canvas data-art="peck" width="32" height="24" aria-hidden="true"></canvas><b id="action-label">КЛЮНУТЬ</b></button><small class="desktop">ПРОБЕЛ / E</small><small class="mobile">ДЕЙСТВИЕ</small></div>
+      </div>
+    </section>
+    <p class="keyboard-hint desktop">WASD — ходить <i>·</i> Q — стая <i>·</i> Esc — пауза</p>
   </section>
-  <p class="legend"><span class="desktop">WASD / стрелки / мышь · Q — стая · R — повтор</span><span class="mobile">Джойстик или касание площади · ↻ — повтор</span></p>
+
+  <section id="menu-screen" class="menu-screen screen" aria-label="Главное меню">
+    <div class="title-block"><p class="maker">LYAGAME</p><h1><span>ГОЛУБИНАЯ</span><strong>МАФИЯ</strong></h1></div>
+    <canvas id="title-art" width="320" height="158" aria-label="Три голубя с картошкой на крыше вечернего города"></canvas>
+    <p class="episode">Операция «Картошка фри»</p>
+    <nav class="menu-list" aria-label="Главное меню">
+      <button id="continue" class="menu-item primary" hidden>Продолжить</button>
+      <button id="play" class="menu-item primary">Начать налёт</button>
+      <button id="open-settings" class="menu-item">Настройки</button>
+      <button id="open-help" class="menu-item">Как играть</button>
+    </nav>
+    <footer><button id="open-credits">Об игре</button><span>ДЕМО · 01</span></footer>
+  </section>
+
+  <section id="pause-screen" class="sheet screen" aria-labelledby="pause-title" hidden>
+    <p class="eyebrow">СТАЯ НА ПЕРЕКУРЕ</p><h2 id="pause-title">Пауза</h2>
+    <canvas data-art="pigeon" class="pause-bird" width="40" height="28" aria-hidden="true"></canvas>
+    <nav class="menu-list"><button id="resume" class="menu-item primary">Продолжить</button><button id="pause-settings" class="menu-item">Настройки</button><button id="restart" class="menu-item">Начать заново</button><button id="home" class="menu-item">В главное меню</button></nav>
+  </section>
+
+  <section id="settings-screen" class="sheet screen" aria-labelledby="settings-title" hidden>
+    <p class="eyebrow">ПОД СЕБЯ</p><h2 id="settings-title">Настройки</h2>
+    <div class="settings-list">
+      <label class="volume" for="music"><span>Музыка</span><output id="music-value">35%</output><input id="music" type="range" min="0" max="100" step="5" value="35"></label>
+      <label class="volume" for="effects"><span>Звуки</span><output id="effects-value">65%</output><input id="effects" type="range" min="0" max="100" step="5" value="65"></label>
+      <label class="toggle"><span>Подсказки</span><input id="hints" type="checkbox" checked><span class="check" aria-hidden="true"></span></label>
+      <label class="toggle"><span>Джойстик справа</span><input id="left-handed" type="checkbox"><span class="check" aria-hidden="true"></span></label>
+      <label class="toggle"><span>Меньше анимации</span><input id="reduced-motion" type="checkbox"><span class="check" aria-hidden="true"></span></label>
+    </div>
+    <button id="defaults" class="text-button">Сбросить настройки</button>
+    <button data-back class="menu-item primary back">Назад</button>
+  </section>
+
+  <section id="help-screen" class="sheet screen" aria-labelledby="help-title" hidden>
+    <p class="eyebrow">ИНСТРУКТАЖ СТАИ</p><h2 id="help-title">План налёта</h2>
+    <ol class="help-list">
+      <li><canvas data-art="walk" width="32" height="28" aria-hidden="true"></canvas><div><b>Подойди к столику</b><p class="mobile">Веди голубя джойстиком или коснись площади.</p><p class="desktop">WASD, стрелки или щелчок мышью по площади.</p></div></li>
+      <li><canvas data-art="fries" width="32" height="28" aria-hidden="true"></canvas><div><b>Утащи картошку</b><p>Нажми «Украсть» рядом с едой.<span class="desktop"> На клавиатуре — E или пробел.</span></p></div></li>
+      <li><canvas data-art="ally" width="32" height="28" aria-hidden="true"></canvas><div><b>Позови своих</b><p>«Стая» рядом с голубем зовёт его с собой. У столика — отвлекает людей.<span class="desktop"> Клавиша Q.</span></p></div></li>
+      <li><canvas data-art="nest" width="32" height="28" aria-hidden="true"></canvas><div><b>Накорми семью</b><p>Принеси две порции в гнездо слева внизу. Дворника обходи, от кота уворачивайся.</p></div></li>
+    </ol>
+    <button data-back class="menu-item primary back">Всё понятно</button>
+  </section>
+
+  <section id="credits-screen" class="sheet screen" aria-labelledby="credits-title" hidden>
+    <p class="eyebrow">LYAGAME</p><h2 id="credits-title">Голубиная<br>мафия</h2>
+    <div class="credits-copy"><p>Один район. Три столика.<br>Две порции для своей стаи.</p><p>Тестовая демоверсия.<br>Графика и музыка созданы для игры.</p><p>Шрифт Pixelify Sans<br>Stefie Justprince · SIL OFL 1.1</p><a href="assets/FONT-LICENSE.txt" target="_blank" rel="noopener">Лицензия шрифта ↗</a></div>
+    <button data-back class="menu-item primary back">Назад</button>
+  </section>
 </main>
 </body>
 </html>

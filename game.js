@@ -13,7 +13,7 @@
   const directions=[0,.63,-.63,1.17,-1.17,1.59,-1.59];
   const joystick={id:null,x:0,y:0};
   const paintOrder=[];
-  let round, raf=0, lastFrame=0, lastPaint=0, lastHud=0, mapTouch=null;
+  let reducedMotion=false, paused=true, round, raf=0, lastFrame=0, lastPaint=0, lastHud=0, mapTouch=null;
   const cache=SCENE.fixed.map(prop=>{
     const image=document.createElement('canvas');
     image.width=70;
@@ -129,6 +129,7 @@
   }
   function alertSweeper(source,direct) {
     const guard=round.sweeper;
+    if (direct && guard.mode!=='chase') SOUND.effect('alert');
     guard.mode=direct?'chase':'check';
     guard.target={x:source.x,y:source.y};
     guard.interest=round.time+(direct?5:2.4);
@@ -149,10 +150,11 @@
     }
   }
   function useAction() {
-    if(round.phase!=='play' || document.hidden) return;
+    if(paused || round.phase!=='play' || document.hidden) return;
     const p=round.p;
     if(round.carrying && between(p,home)<=23) {
       round.carrying=false; round.food++;
+      SOUND.effect('deliver');
       puff(home.x,home.y-7,'gold',9);
       setPose(p,'peck',.27);
       if(round.food===MAX_LOOT) finish('win');
@@ -161,6 +163,7 @@
       const meal=availableMeal(STEAL);
       if(meal) {
         meal.taken=true; round.carrying=true;
+        SOUND.effect('steal');
         p.flip=meal.x<p.x;
         setPose(p,'peck',.27);
         puff(meal.x,meal.y-13,'gold');
@@ -177,6 +180,7 @@
         if(witness) surprise(witness);
       } else {
         setPose(p,'peck',.22);
+        SOUND.effect('peck');
         puff(p.x+(p.flip?-9:9),p.y-5,'dust',3);
         notice('Картошка на столиках. Подойди ближе.',1.5);
       }
@@ -186,14 +190,16 @@
     updateHud();
   }
   function useFlock() {
-    if(round.phase!=='play' || document.hidden) return;
+    if(paused || round.phase!=='play' || document.hidden) return;
     const bird=uncalledBird();
     if(bird) {
       bird.recruited=true; setPose(bird,'flap',.4);
+      SOUND.effect('coo');
       puff(bird.x,bird.y-14,'feather',3);
       notice('Подкрепление! У столика нажми «Стая» ещё раз.');
     } else if(canDistract()) {
       const meal=availableMeal(TARGET);
+      SOUND.effect('flutter');
       round.diversion={meal,until:round.time+6.5,arrived:false};
       round.readyAt=round.time+9;
       notice('Стая летит к столику. Подбирайся к картошке!');
@@ -214,6 +220,9 @@
     ui['result-title'].textContent=win?'Гнездо сыто!':outcome==='cat'?'Кот перехватил!':'Дворник догнал!';
     ui['result-text'].textContent=win?'Две порции для семьи. Можно устроить новый налёт.':outcome==='cat'?'Когда кот приседает, резко меняй направление.':'Отвлеки людей стаей или уйди за столики.';
     ui.result.hidden=false;
+    SOUND.scene('silent');
+    SOUND.effect(win?'win':'lose');
+    window.dispatchEvent(new CustomEvent('game-ended',{detail:{outcome,food:round.food}}));
     updateHud();
   }
   function movePlayer(dt) {
@@ -316,6 +325,7 @@
     if(cat.mode==='stalk') {
       patrol(cat,20,dt);
       if(time>=cat.readyAt && dist<(round.carrying?59:42) && clearSight(cat,p)) {
+        SOUND.effect('cat');
         cat.mode='crouch'; cat.pounceUntil=time+.54; cat.flip=p.x<cat.x;
         cat.chargeTarget={x:p.x,y:p.y}; setPose(p,'alarm',.25);
         notice('Кот присел. Резко меняй направление!',1.6);
@@ -359,7 +369,7 @@
     const ready=Boolean(nearby||canDistract());
     const danger=cat.mode==='leap'||cat.mode==='crouch'?'КОТ!':sweeper.mode==='chase'?'ПОГОНЯ!':sweeper.mode==='check'?'ШУМ':'ТИХО';
     const content={
-      loot:'▱ '+food+'/'+MAX_LOOT+(carrying?' +1':''),
+      loot:''+food+'/'+MAX_LOOT+(carrying?' +1':''),
       danger,
       'action-label':nearHome?'В ГНЕЗДО':nearFood?'УКРАСТЬ':'КЛЮНУТЬ',
       'flock-label':nearby?'ПОЗВАТЬ':diversion?'ОТВЛЕКАЕТ':time<round.readyAt?'ПЕРЕДЫШКА':ready?'ОТВЛЕЧЬ · '+count:count?'В СТАЕ · '+count:'РЯДОМ С ГОЛУБЕМ',
@@ -380,6 +390,7 @@
     ui.call.classList.toggle('ready',ready);
     ui.danger.dataset.guard=sweeper.mode;
     ui.danger.dataset.cat=cat.mode;
+    if(!paused && round.phase==='play') SOUND.scene(sweeper.mode==='chase'?'chase':'play');
   }
   const rect=(color,x,y,w,h)=>{ctx.fillStyle=color;ctx.fillRect(Math.round(x),Math.round(y),w,h);};
   function shadow(x,y,w) {
@@ -403,7 +414,7 @@
   }
   function draw() {
     const {p,cat,sweeper,people,birds,meals,time}=round;
-    SCENE.frame(ctx,time);
+    SCENE.frame(ctx,reducedMotion?0:time);
     shadow(home.x,home.y,27);
     ART.draw(ctx,'nest',home.x,home.y+2);
     if(round.food>0) ART.draw(ctx,'fries',home.x-2,home.y-3);
@@ -462,11 +473,11 @@
     }
   }
   function start() {
-    if(!raf && !document.hidden && round.phase==='play') raf=requestAnimationFrame(loop);
+    if(!raf && !paused && !document.hidden && round.phase==='play') raf=requestAnimationFrame(loop);
   }
   function loop(now) {
     raf=0;
-    if(document.hidden || round.phase!=='play') return;
+    if(paused || document.hidden || round.phase!=='play') return;
     const dt=lastFrame?Math.min((now-lastFrame)/1000,.05):0;
     lastFrame=now;
     tick(dt);
@@ -495,7 +506,7 @@
     ui.joystick.style.setProperty('--dy',String(joystick.y*22)+'px');
   }
   ui.joystick.addEventListener('pointerdown',event=>{
-    if(round.phase!=='play'||joystick.id!==null) return;
+    if(paused||round.phase!=='play'||joystick.id!==null) return;
     event.preventDefault();
     joystick.id=event.pointerId;
     ui.joystick.setPointerCapture(event.pointerId);
@@ -519,7 +530,7 @@
     round.target={x,y,until:round.time+4.2};
   }
   canvas.addEventListener('pointerdown',event=>{
-    if(round.phase!=='play'||event.button!==0) return;
+    if(paused||round.phase!=='play'||event.button!==0) return;
     event.preventDefault();
     mapTouch=event.pointerId;
     canvas.setPointerCapture(event.pointerId);
@@ -532,7 +543,7 @@
     canvas.addEventListener(type,event=>{if(mapTouch===event.pointerId) mapTouch=null;});
   }
   window.addEventListener('keydown',event=>{
-    if(event.metaKey||event.altKey||event.ctrlKey) return;
+    if(paused||round.phase!=='play'||event.metaKey||event.altKey||event.ctrlKey) return;
     const {code}=event;
     if(motionKeys.has(code)) {
       event.preventDefault();
@@ -540,7 +551,7 @@
     } else if(['Space','KeyE','KeyQ','KeyR'].includes(code) && !(event.target instanceof HTMLButtonElement && code==='Space')) {
       event.preventDefault();
       if(event.repeat) return;
-      if(code==='KeyR') reset();
+      if(code==='KeyR') { reset(); SOUND.scene('play'); }
       else if(code==='KeyQ') useFlock();
       else useAction();
     }
@@ -556,7 +567,18 @@
   });
   ui.action.addEventListener('click',useAction);
   ui.call.addEventListener('click',useFlock);
-  ui.restart.addEventListener('click',reset);
-  ui.again.addEventListener('click',reset);
+  window.GAME=Object.freeze({
+    newRun() { paused=false; reset(); SOUND.scene('play'); },
+    pause() {
+      paused=true;
+      cancelAnimationFrame(raf);
+      raf=0; lastFrame=0;
+      round.target=null;
+      clearInput();
+    },
+    resume() { paused=false; lastFrame=0; updateHud(); start(); },
+    setReducedMotion(value) { reducedMotion=Boolean(value); },
+    status() { return {paused,phase:round.phase}; }
+  });
   reset();
 })();
