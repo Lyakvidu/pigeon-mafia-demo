@@ -19,11 +19,19 @@ const CHALLENGES = [
 const UPGRADES = [
   {id:'nest',title:'Уютное гнездо',en:'A proper nest',prices:[40,85],description:'Новая подстилка и навес. При доставке быстрее восстанавливается взлёт.'},
   {id:'wings',title:'Сильные крылья',en:'Strong wings',prices:[50,90],description:'Взлёт восстанавливается на секунду быстрее за каждый уровень.'},
-  {id:'flock',title:'Сбор стаи',en:'Flock rally',prices:[70,110],description:'По одному союзнику ждёт у гнезда за каждый уровень.'}
+  {id:'flock',title:'Сбор стаи',en:'Flock rally',prices:[70,110],description:'По одному союзнику ждёт у гнезда за каждый уровень.'},
+  {id:'signal',title:'Связь стаи',en:'Flock signals',prices:[160,300,480],requires:'c03-10',description:'Дальше слышен зов, быстрее готово отвлечение.',descriptionEn:'Recruit from farther away and recover distractions faster.'},
+  {id:'satchel',title:'Курьерская выучка',en:'Courier training',prices:[240,420,680],requires:'c07-10',description:'Голубь быстрее несёт груз. Все пути доступны и без улучшения.',descriptionEn:'Carry cargo faster. No route requires this upgrade.'},
+  {id:'watch',title:'Дозорные',en:'Flock lookouts',prices:[360,600,900],requires:'c11-10',description:'Раньше предупреждают о коте и помогают меньше попадаться дворнику.',descriptionEn:'More time to dodge a cat and a shorter sweeper detection range.'}
 ];
+CAMPAIGN.forEach(m=>{m.chapter=1;});
+CAMPAIGN[9].unlock='Дальше — сад старого фонтана и новые дела стаи.';
+CAMPAIGN[9].unlockEn='Next: the fountain gardens and new flock business.';
+CAMPAIGN.push(...EXPANSION);
+CHALLENGES.push(...EXTRA_CHALLENGES);
 const PROGRESS = (() => {
   let db, snapshot, error='';
-  const empty=()=>({schema:1,completed:{},upgrades:{nest:0,wings:0,flock:0},crumbs:0});
+  const empty=()=>SAVE_MODEL.migrate(null,UPGRADES);
   function publish(data) { snapshot=data; window.dispatchEvent(new Event('progress-changed')); }
   function failure() { error='Не удалось сохранить прогресс. Разреши хранение данных сайта и попробуй ещё раз.'; }
   function transact(update) {
@@ -34,12 +42,12 @@ const PROGRESS = (() => {
       const read=store.get('campaign');
       let result, data;
       read.onsuccess=()=>{
-        data=read.result||empty();
-        try { result=update(data);store.put(data,'campaign'); }
-        catch(e){tx.abort();reject(e);}
+        try { data=SAVE_MODEL.migrate(read.result,UPGRADES);result=update(data);store.put(data,'campaign'); }
+        catch(e){error=e.message;tx.abort();reject(e);}
       };
       tx.oncomplete=()=>{error='';publish(data);resolve(result);};
       tx.onerror=()=>{failure();reject(new Error(error));};
+      tx.onabort=()=>reject(new Error(error||'Операция сохранения отменена.'));
     });
   }
   const ready=new Promise(resolve=>{
@@ -55,9 +63,8 @@ const PROGRESS = (() => {
     } catch {failure();publish(empty());resolve();}
   });
   function unlocked(mission) {
-    const i=CAMPAIGN.findIndex(m=>m.id===mission.id);
-    if(i<0) return Boolean(snapshot?.completed.territory);
-    return i===0||Boolean(snapshot?.completed[CAMPAIGN[i-1].id]);
+    if(![...CAMPAIGN,...CHALLENGES].some(m=>m.id===mission?.id))return false;
+    return SAVE_MODEL.unlocked(snapshot||empty(),mission,CAMPAIGN);
   }
   return {
     ready,
@@ -67,27 +74,11 @@ const PROGRESS = (() => {
     next:()=>CAMPAIGN.find(m=>!snapshot?.completed[m.id])||CHALLENGES[0],
     async complete(mission,stats) {
       await ready;
-      return transact(data=>{
-        const old=data.completed[mission.id];
-        const medal=stats.time<=mission.par?'gold':stats.time<=mission.par*1.7?'silver':'bronze';
-        const reward=old?0:mission.reward;
-        data.crumbs+=reward;
-        data.completed[mission.id]={best:Math.min(old?.best??Infinity,stats.time),medal:old&&old.best<stats.time?old.medal:medal};
-        return {reward,medal,best:data.completed[mission.id].best,first:!old};
-      });
+      return transact(data=>SAVE_MODEL.complete(data,mission.id,stats.time,CAMPAIGN,CHALLENGES));
     },
     async buy(id) {
       await ready;
-      return transact(data=>{
-        const upgrade=UPGRADES.find(u=>u.id===id);
-        const level=data.upgrades[id]||0;
-        const price=upgrade?.prices[level];
-        if(price===undefined) throw new Error('Улучшение уже завершено.');
-        if(data.crumbs<price) throw new Error('Пока не хватает крошек.');
-        data.crumbs-=price;
-        data.upgrades[id]=level+1;
-        return data.upgrades[id];
-      });
+      return transact(data=>SAVE_MODEL.buy(data,id,UPGRADES));
     },
     refresh:async()=>{await ready;if(db)await transact(()=>null);}
   };

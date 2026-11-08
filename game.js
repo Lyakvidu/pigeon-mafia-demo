@@ -1,13 +1,32 @@
 'use strict';
 (() => {
   const canvas = document.querySelector('#square');
-  const ctx = canvas.getContext('2d', { alpha:false });
+  const display = canvas.getContext('2d', { alpha:false });
   const ui = Object.fromEntries(['loot','danger','tip','result','result-label','result-title','result-text','again',
     'restart','joystick','action','action-label','call','flock-label'].map(id => [id, document.getElementById(id)]));
   const W=320, H=346, TAU=Math.PI*2;
+  const world = document.createElement('canvas');
+  world.width=W; world.height=H;
+  const ctx=world.getContext('2d',{alpha:false});
+  const wings=document.createElement('canvas');
+  const view={x:0,y:0};
+  const touch=matchMedia('(pointer: coarse)');
+  const stage=canvas.parentElement;
+  const fieldNote=document.getElementById('field-note');
+  const fieldAction=document.getElementById('field-action');
+  const fieldTeaching=document.getElementById('field-teaching');
+  const ability=document.getElementById('ability');
+  const pcAction=document.getElementById('pc-action');
+  const pcFlock=document.getElementById('pc-flock');
+  const pcFlight=document.getElementById('pc-flight');
+  let cue=null, teaching=null;
+  const taught=new Set();
+  try {
+    for(const id of JSON.parse(localStorage.getItem('pigeon-mafia-field-tips')||'[]')) taught.add(id);
+  } catch {}
   const home={x:36,y:306};
   const STEAL=29, HEARING=47, TARGET=72;
-  let MAX_LOOT=2, mission=CAMPAIGN[0], scene=SCENE, kit={};
+  let MAX_LOOT=2, mission=CAMPAIGN[0], scene=SCENE, districtId='square', kit={};
   const keys=new Set();
   const motionKeys=new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyS','KeyA','KeyD']);
   let objects=SCENE.fixed.filter(o=>['tree','table','bench','bin','crate'].includes(o.type));
@@ -16,8 +35,9 @@
   const paintOrder=[];
   let reducedMotion=false, paused=true, round, raf=0, lastFrame=0, lastPaint=0, lastHud=0, mapTouch=null;
   let cache=[];
-  function selectScene() {
-    scene=mission.district==='market'?DISTRICTS.market:SCENE;
+  function selectScene(district=mission.district) {
+    districtId=district;
+    scene=NEIGHBORHOODS.get(district);
     objects=scene.fixed.filter(o=>['tree','table','bench','bin','crate'].includes(o.type));
     cache=scene.fixed.map(prop=>{
     const image=document.createElement('canvas');
@@ -26,14 +46,59 @@
     scene.prop(image.getContext('2d'),{...prop,x:35,y:59});
     return {...prop,image};
     });
+    paintWings();
   }
   const between=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
   const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
   const point=([x,y])=>({x,y});
+  function paintWings() {
+    if(canvas.width<=W) return;
+    wings.width=canvas.width;wings.height=canvas.height;
+    const c=wings.getContext('2d');
+    const edge=Math.floor((wings.width-W)/2);
+    const color={square:'#59475a',market:'#534354',park:'#465458',depot:'#4f4654',canal:'#3c545f',roofs:'#53465d'}[districtId];
+    c.fillStyle='#25283a';c.fillRect(0,0,wings.width,wings.height);
+    c.fillStyle=color;c.fillRect(0,66,wings.width,264);
+    for(let y=72;y<330;y+=9) for(let x=(y%2)*7;x<wings.width;x+=17) {
+      c.fillStyle=(x+y)%3?'#ffffff0d':'#00000016';c.fillRect(x,y,16,8);
+    }
+    c.fillStyle='#9e7c78';c.fillRect(0,66,wings.width,3);c.fillRect(0,329,wings.width,3);
+    c.fillStyle='#343044';c.fillRect(edge-3,0,3,H);c.fillRect(edge+W,0,3,H);
+    // These side streets frame the playable board and share the district's pixel props.
+    const props=[['lamp',edge-21,125],['tree',edge-60,215],['bench',edge-61,247],['crate',edge-26,306],
+      ['tree',edge+W+48,125],['lamp',edge+W+21,204],['bench',edge+W+63,245],['bin',edge+W+32,299]];
+    for(const [type,x,y] of props) scene.prop(c,{type,x,y,kind:1});
+  }
+  function layoutView({width,height}) {
+    if(!width||!height) return;
+    const portrait=touch.matches&&width/height<1.05;
+    const minWidth=portrait?252:W;
+    canvas.height=Math.max(portrait?336:H,Math.round(minWidth*height/width));
+    canvas.width=Math.max(minWidth,Math.round(width/height*canvas.height));
+    view.y=Math.floor((H-canvas.height)/2);
+    paintWings();
+    present();
+  }
+  function present() {
+    const width=canvas.width;
+    view.x=width<W?clamp(Math.round(round.p.x-width/2),0,W-width):-Math.floor((width-W)/2);
+    if(width>W) display.drawImage(wings,0,0);
+    else if(view.y<0) {
+      display.fillStyle='#4c4055';display.fillRect(0,0,width,canvas.height);
+      display.fillStyle='#675368';
+      for(let y=3;y<canvas.height;y+=7) {
+        if(y>-view.y&&y<H-view.y) continue;
+        for(let x=y%11;x<width;x+=25) display.fillRect(x,y,7,1);
+      }
+    }
+    display.drawImage(world,-view.x,-view.y);
+    positionCue();
+  }
   function actor(x,y,path=[],variant=0) {
     return {x,y,path:path.map(point),index:0,flip:false,angle:0,variant,moving:false,pose:'',until:0};
   }
   function occupied(x,y) {
+    if(mission.mode==='operation'&&round?.op&&ops.occupied(x,y))return true;
     const cage=round?.job?.cage;
     if(cage&&!cage.open&&['rescue','finale'].includes(mission.mode)&&Math.hypot((x-cage.x)/15,(y-cage.y)/9)<1) return true;
     return objects.some(o=>{
@@ -56,7 +121,7 @@
       const heading=angle+offset;
       const x=clamp(a.x+Math.cos(heading)*step,12,308);
       const y=clamp(a.y+Math.sin(heading)*step,92,319);
-      if (between(a,{x,y}) < .01 || occupied(x,y)) continue;
+      if (between(a,{x,y}) < .01 || occupied(x,y) || a===round?.p&&mission.mode==='operation'&&round.op&&ops.blockedTerrain(x,y)) continue;
       a.x=x; a.y=y; a.angle=heading;
       if(Math.abs(Math.cos(heading))>.17) a.flip=Math.cos(heading)<0;
       a.moving=true;
@@ -83,11 +148,12 @@
   }
   function reset() {
     selectScene();
+    teaching=null;cue=null;
     MAX_LOOT=mission.goal;
     const save=PROGRESS.state();
     kit={...save.upgrades,flight:Boolean(save.completed.courier),scout:Boolean(save.completed.rescue),courier:Boolean(save.completed.wind),protector:Boolean(save.completed.lure)};
     document.querySelector('.mission strong').textContent=I18N.language()==='en'?mission.en:mission.title;
-    document.querySelector('.mission span').textContent=T(mission.district==='market'?'РЫНОК У КАНАЛА':'ВОКЗАЛЬНАЯ ПЛОЩАДЬ');
+    document.querySelector('.mission span').textContent=I18N.language()==='en'?WORLD_DATA.worlds[mission.district].en:WORLD_DATA.worlds[mission.district].ru;
     const p=actor(57,290);
     const sweeper=actor(145,117,[[145,170],[195,215],[262,241],[283,167],[235,116],[141,115]]);
     sweeper.mode='patrol';
@@ -131,11 +197,11 @@
     }
     return selected;
   }
-  function lureTargets() { return mission.mode==='distraction'?[round.job.token]:round.meals.filter(t=>!t.taken); }
+  function lureTargets() { return mission.mode==='operation'?ops.targets():mission.mode==='distraction'?[round.job.token]:round.meals.filter(t=>!t.taken); }
   function availableMeal(range) {
     return nearest(round.meals.filter(t=>!t.taken),round.p,range);
   }
-  function uncalledBird() { return nearest(round.birds.filter(b=>!b.recruited),round.p,HEARING); }
+  function uncalledBird() { return nearest(round.birds.filter(b=>!b.recruited),round.p,HEARING+(kit.signal||0)*6); }
   function followers() { return round.birds.filter(b=>b.recruited); }
   function canDistract() { return followers().length>0 && !round.diversion && round.time>=round.readyAt && nearest(lureTargets(),round.p,TARGET); }
   function surprise(person) {
@@ -149,7 +215,7 @@
     if (direct && guard.mode!=='chase') SOUND.effect('alert');
     if(direct&&guard.mode!=='chase') {
       round.job.alerts++;
-      if(mission.mode==='quiet'&&round.job.alerts>=2) {finish('alarm');return;}
+      if((mission.mode==='quiet'&&round.job.alerts>=2)||(mission.mode==='operation'&&ops.has('quiet')&&round.job.alerts>=3)) {finish('alarm');return;}
     }
     guard.mode=direct?'chase':'check';
     guard.target={x:source.x,y:source.y};
@@ -159,10 +225,13 @@
   function seenByGuard() {
     const {p,sweeper}=round;
     const dist=between(p,sweeper);
-    if(dist>89 || !clearSight(sweeper,p)) return false;
+    if(dist>89-(kit.watch||0)*3 || !clearSight(sweeper,p)) return false;
     if(dist<35) return true;
     const angle=Math.atan2(p.y-sweeper.y,p.x-sweeper.x);
     return Math.cos(angle-sweeper.angle)>.08;
+  }
+  function suspiciousCargo() {
+    return round.carrying&&(mission.mode!=='operation'||round.op.cargo!=='twig'||ops.has('pursuit'));
   }
   function puff(x,y,type,count=5) {
     for(let i=0;i<count;i++) {
@@ -221,22 +290,23 @@
       round.cat.mode='recover';round.cat.readyAt=round.time+4;round.readyAt=round.time+6;
       SOUND.effect('coo');notice('Гром отпугнул кота. Проходи!');return;
     }
+    if(mission.mode==='operation'&&ops.flock()){updateHud();return;}
     const bird=uncalledBird();
     if(bird) {
       bird.recruited=true; setPose(bird,'flap',.4);
       SOUND.effect('coo');
       puff(bird.x,bird.y-14,'feather',3);
-      notice('Подкрепление! У столика нажми «Стая» ещё раз.');
+      notice(mission.mode==='operation'?'Подкрепление готово. Союзник пойдёт за тобой.':'Подкрепление! У столика нажми «Стая» ещё раз.');
     } else if(canDistract()) {
       const meal=nearest(lureTargets(),round.p,TARGET);
       SOUND.effect('flutter');
       round.diversion={meal,until:round.time+6.5,arrived:false};
-      round.readyAt=round.time+9;
-      notice('Стая летит к столику. Подбирайся к картошке!');
+      round.readyAt=round.time+9-(kit.signal||0)*.5;
+      notice(mission.mode==='operation'?'Стая отвлекает прохожих. Действуй.':'Стая летит к столику. Подбирайся к картошке!');
     } else if(followers().length===0) {
       notice('Подойди к любому голубю и позови его.',1.6);
     } else {
-      notice(round.time<round.readyAt?'Стая переводит дух.':'Подойди ближе к столику с картошкой.',1.6);
+      notice(round.time<round.readyAt?'Стая переводит дух.':mission.mode==='operation'?'Стая рядом. Следуй плану заказа.':'Подойди ближе к столику с картошкой.',1.6);
     }
     updateHud();
   }
@@ -249,7 +319,7 @@
     ui.result.dataset.outcome=outcome;
     ui['result-label'].textContent=T(win?'ОПЕРАЦИЯ ВЫПОЛНЕНА':'ОПЕРАЦИЯ СОРВАЛАСЬ');
     ui['result-title'].textContent=T(win?'Заказ выполнен!':outcome==='cat'?'Кот перехватил!':outcome==='rival'?'Соперник перехватил!':outcome==='alarm'?'Слишком много шума!':'Дворник догнал!');
-    ui['result-text'].textContent=T(win?mission.unlock:outcome==='cat'?'Когда кот приседает, резко меняй направление.':'Отвлеки противника стаей или используй взлёт.');
+    ui['result-text'].textContent=win&&I18N.language()==='en'&&mission.unlockEn?mission.unlockEn:T(win?mission.unlock:outcome==='cat'?'Когда кот приседает, резко меняй направление.':'Отвлеки противника стаей или используй взлёт.');
     ui.result.hidden=false;
     SOUND.scene('silent');
     SOUND.effect(win?'win':'lose');
@@ -264,7 +334,7 @@
     const y=horizontal||vertical ? vertical : joystick.y;
     const length=Math.hypot(x,y);
     const flying=round.time<round.job.flightUntil;
-    const speed=(flying?145:round.carrying?(kit.courier?79:67):85)*(currentPose(p)==='peck'?.69:1);
+    const speed=(flying?145:round.carrying?(kit.courier?79:67)+(kit.satchel||0)*2:85)*(currentPose(p)==='peck'?.69:1);
     if(length>.06) {
       round.target=null;
       move(p,Math.atan2(y,x),speed*dt*Math.min(1,length));
@@ -278,7 +348,9 @@
     const p=round.p, lure=round.diversion;
     if(lure && round.time>=lure.until) round.diversion=null;
     round.birds.forEach((b,i)=>{
-      if(!b.recruited) {
+      if(b.station) {
+        approach(b,b.station,96,dt,3);
+      } else if(!b.recruited) {
         patrol(b,8,dt);
       } else if(round.diversion) {
         const target={x:lure.meal.x-24+i*16,y:lure.meal.y+8+Math.sin(round.time*7+i)*8};
@@ -331,6 +403,7 @@
     const {sweeper:g,p}=round;
     const time=round.time;
     if(g.mode==='investigate') {
+      if(time<(g.investigateAt||0))return;
       if(between(g,g.target)<12) {
         g.target.done=true;g.mode='patrol';SOUND.effect('deliver');notice('Метка пройдена. Следующая точка или домой.');
       } else {
@@ -339,9 +412,9 @@
       }
     } else if(g.mode==='patrol') {
       patrol(g,28,dt);
-      if(round.carrying && seenByGuard() && between(g,p)<62) alertSweeper(p,true);
+      if(suspiciousCargo() && seenByGuard() && between(g,p)<62) alertSweeper(p,true);
     } else if(g.mode==='check') {
-      if(round.carrying && seenByGuard()) alertSweeper(p,true);
+      if(suspiciousCargo() && seenByGuard()) alertSweeper(p,true);
       else if(time>g.interest || between(g,g.target)<5) g.mode='patrol';
       else approach(g,g.target,41,dt);
     } else {
@@ -371,7 +444,7 @@
       patrol(cat,20,dt);
       if(time>=cat.readyAt && dist<(round.carrying?59:42) && clearSight(cat,p)) {
         SOUND.effect('cat');
-        cat.mode='crouch'; cat.pounceUntil=time+.54; cat.flip=p.x<cat.x;
+        cat.mode='crouch'; cat.pounceUntil=time+.54+(kit.watch||0)*.06; cat.flip=p.x<cat.x;
         cat.chargeTarget={x:p.x,y:p.y}; setPose(p,'alarm',.25);
         notice('Кот присел. Резко меняй направление!',1.6);
       }
@@ -423,11 +496,11 @@
       'action-label':nearHome?'В ГНЕЗДО':nearFood?'УКРАСТЬ':'КЛЮНУТЬ',
       'flock-label':support?'ПРОГНАТЬ':guardCat?'ЗАЩИТИТЬ':nearby?'ПОЗВАТЬ':diversion?'ОТВЛЕКАЕТ':time<round.readyAt?'ПЕРЕДЫШКА':ready?'ОТВЛЕЧЬ · '+count:count?'В СТАЕ · '+count:'РЯДОМ С ГОЛУБЕМ',
       tip:time<round.messageUntil?round.message:
-        !round.moved?'Коснись площади или веди голубя джойстиком.':
+        !round.moved?(touch.matches?'Коснись площади или веди голубя джойстиком.':'Веди голубя клавишами WASD или щелчком по площади.'):
         nearHome?'Гнездо рядом. Оставь порцию.':
         carrying?'Неси картошку в гнездо слева внизу.':
         nearFood?'Картошка рядом. Жми «Украсть».':
-        nearby?'Голубь рядом. Позови его кнопкой «Стая».':
+        nearby?(touch.matches?'Позови голубя, пока он рядом.':'Подойди к голубю и нажми Q.'):
         'Найди две порции картошки. Гнездо слева внизу.'
     };
     for(const [id,text] of Object.entries(content)) {
@@ -440,6 +513,7 @@
     ui.danger.dataset.guard=sweeper.mode;
     ui.danger.dataset.cat=cat.mode;
     specialHud();
+    updateControls({nearby,nearHome,nearFood,support,guardCat,ready:ready||Boolean(mission.mode==='operation'&&ops.diversionTarget())});
     if(!paused && round.phase==='play') SOUND.scene(sweeper.mode==='chase'?'chase':'play');
   }
   const rect=(color,x,y,w,h)=>{ctx.fillStyle=color;ctx.fillRect(Math.round(x),Math.round(y),w,h);};
@@ -493,6 +567,8 @@
           ART.draw(ctx,'fries',item.x-3,item.y-12);
           if(flash && !round.carrying && between(p,item)<55) rect('#fff4b4',item.x+5,item.y-24,2,2);
         }
+      } else if(item.operationGate) {
+        ops.gateArt(item.operationGate);
       } else if(item.jobObject) {
         DISTRICTS.drawObject(ctx,item.jobObject,item.x,item.drawY??item.y,item.options);
       } else if(item.nest) {
@@ -533,11 +609,12 @@
       if(f.type==='feather') ART.draw(ctx,'feather',f.x,f.y);
       else rect(f.type==='gold'?'#ffdc83':'#efbd8b',f.x,f.y,f.age<.2?3:2,2);
     }
+    present();
   }
   function drawCargo(p,pose) {
     // The carried item follows the beak and stays in the player's depth group.
-    const parcel=['courier','distraction','finale'].includes(mission.mode);
-    const twig=mission.mode==='wind',peck=pose==='peck';
+    const parcel=['courier','distraction','finale'].includes(mission.mode)||(mission.mode==='operation'&&round.op.cargo!=='twig');
+    const twig=mission.mode==='wind'||mission.mode==='operation'&&round.op.cargo==='twig',peck=pose==='peck';
     const beakX=p.x+(p.flip?-1:1)*(peck?10:12);
     const beakY=p.y-(peck?3:14)-(pose==='walk'?Math.floor(round.time*12)%2:pose==='alarm'?2:0);
     const cargoX=beakX+(p.flip?-1:1)*(parcel?8:twig?7:6);
@@ -570,16 +647,18 @@
         round.birds.push(b);
       }
     }
+    if(mode==='operation')ops.setup();
     notice(jobHint(),4);
   }
   function jobHint() {
     const mode=mission.mode, job=round.job;
+    if(mode==='operation')return ops.hint();
     if(round.carrying) return ['courier','wind'].includes(mode)&&!job.markers[0].done?'Пройди через зелёную метку.':'Груз в клюве. Возвращайся в гнездо.';
     const hints={steal:'Укради две порции и принеси в гнездо.',distraction:'Отвлеки людей стаей у левого столика.',courier:'Забери письмо у кафе слева.',rescue:job.cage.open?'Доведи спасённого голубя до гнезда.':'Открой клетку тремя ударами клюва.',territory:'Займи три флажка вместе с союзником.',wind:'Забери ветки у правого прилавка.',quiet:'Средний прилавок открывается по зелёной метке.',lure:job.markers.every(m=>m.done)?'Оба обхода выполнены. Возвращайся домой.':'Свистни у метки и отойди с пути.',escort:job.markers[0].done?'Веди обоих голубей домой.':'Позови двух голубей и проведи через метку.',finale:!job.lever.open?'Открой задвижку слева.':!job.cage.open?'Освободи своего из клетки.':'Собери двух союзников и забери большой ящик.'};
     return hints[mode];
   }
   function nearbyMarker() { return nearest(round.job.markers.filter(m=>!m.done),round.p,25); }
-  function hasRival() { return ['territory','escort','finale'].includes(mission.mode); }
+  function hasRival() { return mission.mode==='operation'?ops.has('rival'):['territory','escort','finale'].includes(mission.mode); }
   function fly() {
     if(paused||round.phase!=='play'||!kit.flight) return;
     if(round.time<round.job.flightReady) return;
@@ -590,6 +669,7 @@
   }
   function jobAction() {
     const {p,job}=round, mode=mission.mode;
+    if(mode==='operation')return ops.action();
     if(mode==='steal'||mode==='quiet') {
       if(mode==='quiet'&&!round.carrying&&availableMeal(STEAL)&&round.time%8>3) {
         notice('Прилавок закрыт. Дождись зелёной метки.',1.5);
@@ -669,6 +749,7 @@
   }
   function updateJob(dt) {
     const {job,p,time}=round, mode=mission.mode;
+    if(mode==='operation'){ops.tick(dt);return;}
     if(mission.district==='market') {
       job.cart.x=174+68*Math.sin(time*(mission.variant ? 0.9 : 0.55));
       if(p.x>202&&p.x<235&&p.y>215&&p.y<285&&time>job.flightUntil) {
@@ -680,14 +761,7 @@
         notice('Тележка! Обойди её или перелети.',1);
       }
     }
-    if(hasRival()) {
-      const rival=job.rival;
-      rival.moving=false;
-      if(time<rival.fleeUntil) approach(rival,{x:301,y:305},72,dt);
-      else if(between(rival,p)<62) approach(rival,p,mission.variant?62:48,dt,6);
-      else patrol(rival,27,dt);
-      if(between(rival,p)<9&&time>job.flightUntil&&time>rival.fleeUntil) finish('rival');
-    }
+    if(hasRival())updateRival(dt);
     if(mode==='territory'&&job.capture) {
       const flag=job.capture;
       if(between(p,flag)<25&&followers().some(b=>between(b,flag)<50)&&between(job.rival,flag)>28) {
@@ -707,8 +781,16 @@
       }
     }
   }
+  function updateRival(dt) {
+    const {job,p,time}=round,rival=job.rival;rival.moving=false;
+    if(time<rival.fleeUntil)approach(rival,{x:301,y:305},72,dt);
+    else if(between(rival,p)<62)approach(rival,p,mission.variant?62:48,dt,6);
+    else patrol(rival,27,dt);
+    if(between(rival,p)<9&&time>job.flightUntil&&time>rival.fleeUntil)finish('rival');
+  }
   function specialHud() {
     const {job,p,time}=round,mode=mission.mode;
+    if(mode==='operation'){ops.hud();return;}
     let count=round.food, label='', ready=false;
     if(['courier','wind','finale'].includes(mode)) count=job.stage;
     if(mode==='territory') {
@@ -723,18 +805,67 @@
     if(mode==='finale'&&!job.lever.open&&between(p,job.lever)<25) {label='ЗАДВИЖКА';ready=true;}
     if(job.token&&!job.token.taken&&between(p,job.token)<28) {label='ЗАБРАТЬ';ready=true;}
     if(mode==='escort') count=round.birds.filter(b=>b.checked).length;
-    if(['rescue','escort','lure'].includes(mode)&&between(p,home)<26) {label='В ГНЕЗДО';ready=true;}
+    const returning=mode==='rescue'&&job.cage.open||mode==='escort'&&job.markers[0].done||mode==='lure'&&job.markers.every(m=>m.done);
+    if(returning&&between(p,home)<26) {label='В ГНЕЗДО';ready=true;}
     if(round.carrying&&between(p,home)<25) {label='В ГНЕЗДО';ready=true;}
     if(mode==='quiet'&&!round.carrying&&availableMeal(STEAL)&&time%8>3) {label='ЗАКРЫТО';ready=false;}
     if(label) ui['action-label'].textContent=T(label);
     if(!['steal','quiet'].includes(mode)) ui.loot.textContent=count+'/'+mission.goal+(round.carrying?' +':'');
     ui.action.classList.toggle('ready',ready||Boolean(!label&&ui.action.classList.contains('ready')));
-    const ability=document.getElementById('ability');
-    ability.hidden=!kit.flight;
-    const cooldown=Math.max(0,Math.ceil(job.flightReady-time));
-    ability.disabled=cooldown>0;
-    ability.textContent=cooldown?T('ВЗЛЁТ')+' '+cooldown:T('ВЗЛЁТ');
     if(round.time>=round.messageUntil&&mission.mode!=='steal') ui.tip.textContent=T(jobHint());
+  }
+  function updateControls({nearby,nearHome,nearFood,support,guardCat,ready}) {
+    const {p,job,time,sweeper,cat}=round;
+    const mode=mission.mode;
+    const objective=mode==='operation'?ops.nearby():null;
+    const lock=objective?.node.type==='rescue'?{...objective,hits:round.op.hits}:
+      ['rescue','finale'].includes(mode)&&!job.cage.open&&between(p,job.cage)<26?job.cage:null;
+    const operationDiversion=mode==='operation'?ops.diversionTarget():null;
+    const distraction=operationDiversion||canDistract();
+    const kind=objective?.node.type;
+    const flyer=kind==='flight';
+    const passive=['escort','claim','hide'].includes(kind);
+    const context=ui.action.classList.contains('ready')&&!flyer&&!passive;
+    ui.action.hidden=!context;
+    ui.call.hidden=!ready;
+    const flockLabel=support?'ПРОГНАТЬ':guardCat?'ЗАЩИТИТЬ':operationDiversion?'ОТВЛЕЧЬ':nearby?'ПОЗВАТЬ':distraction?'ОТВЛЕЧЬ':'СТАЯ';
+    ui['flock-label'].textContent=T(flockLabel);
+    pcAction.textContent=context?ui['action-label'].textContent:T('КЛЮНУТЬ');
+    pcFlock.textContent=T(flockLabel);
+    const cooldown=Math.max(0,Math.ceil(job.flightReady-time));
+    const flightUseful=flyer||p.moving||round.carrying||['wind','courier'].includes(mode)||
+      ['canal','roofs'].includes(districtId)||sweeper.mode==='chase'||between(p,cat)<62;
+    if(flightUseful) job.offerFlightUntil=time+2;
+    ability.hidden=!kit.flight||cooldown>0||time>=(job.offerFlightUntil||0);
+    ability.textContent=T('ВЗЛЁТ');
+    pcFlight.hidden=!kit.flight;
+    pcFlight.lastElementChild.textContent=T('ВЗЛЁТ')+(cooldown?' · '+cooldown:'');
+    cue=null;
+    if(lock) cue={at:lock,label:T('Замок')+' · '+lock.hits+'/3',key:'lock',lesson:T('Три клевка по замку. Голубь пойдёт за тобой.'),lift:34};
+    else if(nearby&&flockLabel==='ПОЗВАТЬ') cue={at:nearby,label:T('ПОЗВАТЬ'),key:'recruit',lesson:T('Позови голубя. Он пойдёт за тобой.'),lift:23};
+    else if(distraction&&flockLabel==='ОТВЛЕЧЬ') cue={at:distraction,label:T('ОТВЛЕЧЬ'),key:'divert',lesson:T('Стая отвлечёт людей. Ты сможешь забрать добычу.'),lift:29};
+    else if(flyer) cue={at:objective,label:T('ВЗЛЁТ'),key:'flight',lesson:T('Взлёт помогает пересечь опасный участок.'),lift:24};
+    else if(passive) cue={at:objective,label:ui['action-label'].textContent,lift:24,passive:true};
+    else if(context&&(objective||nearHome||nearFood)) cue={at:objective||(nearHome?home:nearFood),label:ui['action-label'].textContent,lift:28};
+    if(cue) {
+      const label=(touch.matches||cue.passive?'':cue.key==='flight'?'F · ':['recruit','divert'].includes(cue.key)?'Q · ':'E · ')+cue.label;
+      if(fieldAction.textContent!==label) fieldAction.textContent=label;
+      if(cue.lesson&&!taught.has(cue.key)&&!document.body.classList.contains('no-hints')&&!paused) {
+        taught.add(cue.key);
+        teaching={key:cue.key,until:time+5.5};
+        try {localStorage.setItem('pigeon-mafia-field-tips',JSON.stringify([...taught]));} catch {}
+      }
+      const lesson=teaching?.key===cue.key&&time<teaching.until?cue.lesson:'';
+      if(fieldTeaching.textContent!==lesson) fieldTeaching.textContent=lesson;
+    }
+    positionCue();
+  }
+  function positionCue() {
+    fieldNote.hidden=!cue||round.phase!=='play';
+    if(fieldNote.hidden) return;
+    const x=clamp((cue.at.x-view.x)/canvas.width*100,22,78);
+    const y=clamp((cue.at.y-cue.lift-view.y)/canvas.height*100,22,93);
+    fieldNote.style.left=x+'%';fieldNote.style.top=y+'%';
   }
   function drawJobGround() {
     const {job,time}=round,mode=mission.mode;
@@ -743,6 +874,7 @@
       ctx.save();ctx.globalAlpha=.13;ctx.fillStyle='#fff0ad';
       ctx.beginPath();ctx.moveTo(g.x,g.y);ctx.arc(g.x,g.y,68,g.angle-.7,g.angle+.7);ctx.closePath();ctx.fill();ctx.restore();
     }
+    if(mode==='operation'){ops.ground();return;}
     if(['courier','wind','escort','lure'].includes(mode)) for(const marker of job.markers) {
       if(!marker.done) diamond(marker.x,marker.y,'#8fd0bc');
       else rect('#8fd0bc',marker.x-4,marker.y,8,2);
@@ -750,6 +882,7 @@
   }
   function queueJobObjects() {
     const {job,time}=round,mode=mission.mode;
+    if(mode==='operation'){ops.queue();return;}
     const add=(jobObject,position,options={},shadowWidth=0)=>paintOrder.push({...position,jobObject,options,shadowWidth});
     if(mode==='territory') for(const f of job.flags) add('flag',f,{friendly:f.done,progress:f.progress},17);
     if(mode==='rescue'||mode==='finale') add('cage',job.cage,{open:job.cage.open},34);
@@ -832,8 +965,8 @@
   }
   function moveTo(event) {
     const bounds=canvas.getBoundingClientRect();
-    const x=clamp((event.clientX-bounds.left)*W/bounds.width,12,308);
-    const y=clamp((event.clientY-bounds.top)*H/bounds.height,92,319);
+    const x=clamp(view.x+(event.clientX-bounds.left)*canvas.width/bounds.width,12,308);
+    const y=clamp(view.y+(event.clientY-bounds.top)*canvas.height/bounds.height,92,319);
     round.target={x,y,until:round.time+4.2};
   }
   canvas.addEventListener('pointerdown',event=>{
@@ -875,7 +1008,7 @@
   });
   ui.action.addEventListener('click',useAction);
   ui.call.addEventListener('click',useFlock);
-  document.getElementById('ability').addEventListener('click',fly);
+  ability.addEventListener('click',fly);
   window.GAME=Object.freeze({
     newRun(selected=mission) { mission=selected;paused=false; reset(); SOUND.scene('play'); },
     pause() {
@@ -887,12 +1020,16 @@
     },
     resume() { paused=false; lastFrame=0; updateHud(); start(); },
     setReducedMotion(value) { reducedMotion=Boolean(value); },
-    status() { return {paused,phase:round.phase,mission:mission.id}; }
+    status() { return {paused,phase:round.phase,mission:mission.id}; },
+    view() { return {...view,width:canvas.width,height:canvas.height}; }
   });
   window.addEventListener('language-changed',()=>{
     document.querySelector('.mission strong').textContent=I18N.language()==='en'?mission.en:mission.title;
-    document.querySelector('.mission span').textContent=T(mission.district==='market'?'РЫНОК У КАНАЛА':'ВОКЗАЛЬНАЯ ПЛОЩАДЬ');
+    const district=round.op?.district||mission.district;
+    document.querySelector('.mission span').textContent=I18N.language()==='en'?WORLD_DATA.worlds[district].en:WORLD_DATA.worlds[district].ru;
     updateHud();
   });
+  const ops=createOperations({ctx,rect,shadow,diamond,actor,between,followers,notice,setPose,alertSweeper,seenByGuard,finish,selectScene,paintOrder,updateRival,round:()=>round,mission:()=>mission,kit:()=>kit,scene:()=>scene});
   reset();
+  new ResizeObserver(([entry])=>layoutView(entry.contentRect)).observe(stage);
 })();
