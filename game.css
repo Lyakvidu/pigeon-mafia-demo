@@ -1,4 +1,3 @@
-@font-face{font-family:Pixel;src:url('assets/pixelify.ttf') format('truetype');font-weight:400 700;font-display:swap}
 @font-face{font-family:Golos;src:url('assets/golos-text.ttf') format('truetype');font-weight:400 900;font-display:swap}
 :root{color-scheme:dark;font-family:Golos,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#eee4c8;background:#1b2031;font-synthesis:none;-webkit-text-size-adjust:100%;--paper:#eee4c8;--yellow:#f2b95b;--mint:#8fc3b1;--muted:#9c9baf;--ink:#1b2031;--top:env(safe-area-inset-top,0px);--bottom:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box}body{margin:0;min-width:280px;min-height:100dvh;overscroll-behavior:none}
@@ -9,9 +8,9 @@ canvas,svg{image-rendering:pixelated}svg{shape-rendering:crispEdges}h1,h2,p{marg
 .screen{width:100%;min-height:100dvh;padding:max(24px,var(--top)) 26px max(20px,var(--bottom));}
 .menu-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;max-width:520px;margin:auto;min-height:100dvh}
 .title-block{text-align:center;position:relative;z-index:1;width:100%}.maker{font-size:11px;font-weight:700;letter-spacing:.28em;color:var(--mint);margin-bottom:20px}
-h1{font-family:Pixel,monospace;line-height:.9;font-weight:700;color:var(--paper);text-shadow:0 3px #9a5953,3px 3px #9a5953,0 6px #111724;white-space:nowrap}
-h1 span{display:block;font-size:clamp(30px,9vw,47px);letter-spacing:.015em}
-h1 strong{display:block;font-size:clamp(64px,20vw,105px);font-weight:700;color:var(--yellow);letter-spacing:.035em;line-height:.9;margin-top:6px}
+h1{font-family:Golos,sans-serif;line-height:.9;font-weight:700;color:var(--paper);text-shadow:0 3px #9a5953,3px 3px #9a5953,0 6px #111724;white-space:nowrap}
+h1 span{display:block;font-size:clamp(24px,7.5vw,39px);letter-spacing:.015em}
+h1 strong{display:block;font-size:clamp(53px,16vw,84px);font-weight:700;color:var(--yellow);letter-spacing:.035em;line-height:.9;margin-top:6px}
 #title-art{display:block;width:calc(100% + 32px);height:auto;aspect-ratio:320/158;margin:8px -16px 0;max-height:255px;object-fit:contain}
 .episode{color:#b5bcc5;font-size:15px;line-height:1.4;margin:11px 0 19px}
 .menu-list{display:flex;align-items:stretch;flex-direction:column;gap:3px;min-width:235px}
@@ -91,3 +90,55 @@ input[type=range]::-moz-range-thumb{width:12px;height:20px;border:2px solid var(
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 .reduced-motion *{transition:none!important;animation:none!important}
 #app[data-screen=result] .controls,#app[data-screen=result] .tip-line,#app[data-screen=result] #pause{visibility:hidden}
+/* Campaign pages share the same compact type scale and unboxed menu rhythm. */
+h1{font-weight:850}
+h1 span,h1 strong{letter-spacing:-.025em}
+.key-cluster{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+#ability{min-height:30px;min-width:76px;padding:5px 10px;border-bottom:2px solid #8fae9d;color:#d5e4cf;font-size:11px;font-weight:700}
+#ability:disabled{opacity:.45}
+.language-row{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;font-size:15px}
+.language-row select{background:#252c3e;color:#eee4c8;border:1px solid #657486;font:inherit;padding:8px}
+#save-error{position:relative;padding:10px 16px;background:#4b323b;color:#fff0d0;font-size:13px;line-height:1.4;z-index:5}
+.board-screen,.nest-screen{max-width:560px;margin:auto;padding-top:max(22px,var(--top));padding-bottom:max(22px,var(--bottom))}
+.board-header{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:20px}
+.board-header h2{font-size:30px}.board-header .eyebrow{margin-bottom:7px}
+.wallet{font-size:15px;color:#efbc75;white-space:nowrap}
+.order-list{display:flex;flex-direction:column;gap:1px}
+.order-row{display:grid;grid-template-columns:25px 1fr 18px;gap:10px;align-items:center;min-height:39px;text-align:left;padding:7px 5px;font-size:15px}
+.order-row span:first-child{color:#929eaa;font-size:11px}.order-row span:last-child{color:#8fc3b1;text-align:center}
+.order-row.selected{color:#f2b95b;background:#242b3a}.order-row:disabled{opacity:.43}
+#order-brief{margin-top:20px;padding-top:15px;border-top:1px solid #444858}
+#order-brief h3,.upgrade-row h3{font-size:18px;margin:0 0 8px}
+#order-intro,#order-unlock,.upgrade-row p,#flock-progress{font-size:14px;line-height:1.5;color:#c5c9cd;margin:0 0 8px}
+#order-unlock{color:#91b5a8;font-size:13px}#order-record{font-size:12px;color:#efbc75;margin:9px 0}
+.board-nav{display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}.board-nav .text-button{font-size:13px}
+#nest-art{width:100%;height:auto;image-rendering:pixelated;margin:0 0 15px}
+.upgrade-row{padding:16px 0;border-bottom:1px solid #3c4354}.upgrade-row .text-button{margin:0;padding:7px 0;color:#efbc75;font-size:14px}
+.upgrade-row .text-button:disabled{color:#7a8596;text-decoration:none}
+#purchase-note{font-size:14px;min-height:22px;margin-top:10px;color:#91c8ac}
+#reward{font-size:13px;color:#a4d3b7;margin:0 0 7px}
+.result .menu-item{font-size:17px;min-height:38px;padding-top:6px;padding-bottom:6px}
+#result-art{width:140px;height:58px}
+@media(max-width:360px){
+  .hud{gap:6px;padding:0 8px}.mission strong{font-size:13px}#loot{font-size:16px}
+  .controls{padding:5px 10px;gap:7px}.stick{width:78px;height:78px}.command{width:65px;height:65px}.keys{gap:10px}
+  .action-group small{font-size:8px}.screen{padding-left:20px;padding-right:20px}
+  .toggle{font-size:15px}.credits-copy{font-size:14px}.menu-item{font-size:19px}
+}
+@media(orientation:landscape) and (max-height:600px){
+  h1 span{font-size:24px}h1 strong{font-size:60px}
+  .board-screen,.nest-screen{max-width:650px}
+  .controls{padding-bottom:12px;gap:10px}.key-cluster{align-items:center}
+}
+.challenge-heading{margin:20px 5px 8px}
+.result{overflow-y:auto;justify-content:safe center}
+#result-text{font-size:14px}
+@media(max-width:360px){
+  .result{padding:14px 12px}
+  .result h2{font-size:24px}
+  #result-art{width:110px;height:46px}
+  #result-label{font-size:10px;margin:6px 0}
+  #result-text{font-size:13px;margin-bottom:8px}
+  .result .menu-item{font-size:15px;min-height:36px}
+}
+.done-mark::after{content:'';display:block;width:7px;height:12px;border-right:2px solid #8fc3b1;border-bottom:2px solid #8fc3b1;transform:rotate(40deg);margin:auto}

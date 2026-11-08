@@ -2,9 +2,9 @@
 (() => {
   const app=document.getElementById('app');
   const byId=id=>document.getElementById(id);
-  const screenIds=['menu','pause','settings','help','credits'];
+  const screenIds=['menu','pause','settings','help','credits','board','nest'];
   const defaults={music:35,effects:65,hints:true,leftHanded:false,reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches};
-  let settings={...defaults}, screen='menu', backTo='menu', hasRun=false;
+  let settings={...defaults}, screen='menu', backTo='menu', hasRun=false, selected=CAMPAIGN[0], activeMission=CAMPAIGN[0], saving=false;
   try {
     const saved=JSON.parse(localStorage.getItem('pigeon-mafia-settings')||'{}');
     for(const key of ['music','effects']) if(Number.isFinite(saved[key])) settings[key]=Math.max(0,Math.min(100,saved[key]));
@@ -28,6 +28,8 @@
   }
   function show(next,focus=true) {
     screen=next;
+    if(next==='board') renderBoard();
+    if(next==='nest') renderNest();
     app.dataset.screen=next;
     const inGame=next==='playing'||next==='result';
     byId('game-screen').hidden=!inGame;
@@ -44,10 +46,11 @@
   }
   function clickSound() { SOUND.unlock().then(()=>SOUND.effect('click')); }
   function startRun() {
+    if(saving) return;
     clickSound();
     hasRun=true;
     show('playing',false);
-    GAME.newRun();
+    GAME.newRun(activeMission);
   }
   function resume() {
     clickSound();
@@ -63,7 +66,7 @@
     clickSound();
     show(name);
   }
-  byId('play').addEventListener('click',startRun);
+  byId('play').addEventListener('click',async()=>{await PROGRESS.ready;selected=PROGRESS.next();clickSound();show('board');});
   byId('restart').addEventListener('click',startRun);
   byId('again').addEventListener('click',startRun);
   byId('resume').addEventListener('click',resume);
@@ -87,9 +90,19 @@
     byId(id).addEventListener('change',()=>{settings[key]=byId(id).checked;applySettings();clickSound();});
   }
   byId('defaults').addEventListener('click',()=>{settings={...defaults};applySettings();clickSound();});
-  window.addEventListener('game-ended',event=>{
-    drawResult(event.detail.outcome);
+  window.addEventListener('game-ended',async event=>{
+    const {outcome,mission,time}=event.detail;
+    drawResult(outcome);
     show('result');
+    if(outcome!=='win') return;
+    saving=true;
+    byId('next-order').disabled=true;
+    byId('again').disabled=true;
+    try {
+      const receipt=await PROGRESS.complete(mission,{time});
+      byId('reward').textContent=receipt.first?'+'+receipt.reward+' '+T('крошек')+' · '+T('Рекорд')+' '+receipt.best.toFixed(1)+' '+T('с')+' · '+medalName(receipt.medal):T('Награда уже получена')+' · '+T('Рекорд')+' '+receipt.best.toFixed(1)+' '+T('с');
+    } catch(e) {byId('reward').textContent=T(e.message);showSaveError();}
+    saving=false;byId('next-order').disabled=false;byId('again').disabled=false;
   });
   window.addEventListener('blur',pause);
   document.addEventListener('visibilitychange',()=>{
@@ -102,6 +115,7 @@
       event.preventDefault();
       if(screen==='playing') pause();
       else if(screen==='pause') resume();
+      else if(['board','nest'].includes(screen)) show('menu');
       else if(['settings','help','credits'].includes(screen)) show(backTo);
       return;
     }
@@ -189,6 +203,100 @@
     r('#92b8ae',47,91,2,3);r('#92b8ae',45,93,6,1);
     r('#92b8ae',273,80,1,4);r('#92b8ae',271,82,5,1);
   }
+  function showSaveError() {
+    const message=PROGRESS.error();
+    byId('save-error').hidden=!message;
+    byId('save-error').textContent=T(message);
+  }
+  function renderWallet() {
+    document.querySelectorAll('.wallet').forEach(el=>el.textContent=PROGRESS.state().crumbs+' '+T('крошек'));
+  }
+  function medalName(medal) {return T({gold:'Золото',silver:'Серебро',bronze:'Бронза'}[medal]);}
+  function missionName(m) {return I18N.language()==='en'?m.en:m.title;}
+  function renderBoard() {
+    renderWallet();
+    const list=byId('order-list');
+    list.replaceChildren();
+    const save=PROGRESS.state();
+    const available=save.completed.territory?[...CAMPAIGN,...CHALLENGES]:CAMPAIGN;
+    for(const [index,m] of available.entries()) {
+      if(index===10){const heading=document.createElement('p');heading.className='eyebrow challenge-heading';heading.textContent=T('Испытания');list.append(heading);}
+      const row=document.createElement('button');
+      row.className='order-row'+(m.id===selected.id?' selected':'');
+      row.disabled=!PROGRESS.unlocked(m);
+      row.dataset.mission=m.id;
+      row.setAttribute('aria-pressed',String(m.id===selected.id));
+      const number=document.createElement('span');number.textContent=index<10?String(index+1).padStart(2,'0'):String(index-9);
+      const name=document.createElement('span');name.textContent=missionName(m);
+      const status=document.createElement('span');status.textContent=save.completed[m.id]?'':row.disabled?'—':'›';
+      if(save.completed[m.id]){status.className='done-mark';status.setAttribute('aria-label',T('Выполнено'));}
+      row.append(number,name,status);
+      row.addEventListener('click',()=>{selected=m;SOUND.effect('click');renderBoard();});
+      list.append(row);
+    }
+    byId('order-title').textContent=missionName(selected);
+    byId('order-intro').textContent=T(selected.intro);
+    byId('order-unlock').textContent=T(selected.unlock);
+    const best=save.completed[selected.id];
+    byId('order-record').textContent=best?T('Рекорд')+' '+best.best.toFixed(1)+' '+T('с')+' · '+medalName(best.medal)+' · '+T('Награда уже получена'):'+'+selected.reward+' '+T('крошек');
+    byId('launch-order').disabled=!PROGRESS.unlocked(selected);
+    showSaveError();
+  }
+  function renderNest() {
+    renderWallet();
+    const save=PROGRESS.state(), list=byId('upgrade-list');
+    list.replaceChildren();
+    for(const upgrade of UPGRADES) {
+      const level=save.upgrades[upgrade.id],price=upgrade.prices[level];
+      const row=document.createElement('div');row.className='upgrade-row';
+      const title=document.createElement('h3');title.textContent=(I18N.language()==='en'?upgrade.en:upgrade.title)+' '+level+'/2';
+      const description=document.createElement('p');description.textContent=T(upgrade.description);
+      const buy=document.createElement('button');buy.className='text-button';buy.dataset.upgrade=upgrade.id;
+      buy.textContent=price===undefined?T('Завершено'):T('Улучшить')+' · '+price;
+      buy.disabled=price===undefined||save.crumbs<price;
+      buy.addEventListener('click',async()=>{
+        buy.disabled=true;
+        try {await PROGRESS.buy(upgrade.id);SOUND.effect('deliver');byId('purchase-note').textContent=T('Улучшение сохранено.');}
+        catch(e){byId('purchase-note').textContent=T(e.message);}
+        renderNest();
+      });
+      row.append(title,description,buy);list.append(row);
+    }
+    const recruits=[];
+    if(save.completed.rescue) recruits.push(T('Сизый — разведчик'));
+    if(save.completed.wind) recruits.push(T('Рыжик — курьер'));
+    if(save.completed.lure) recruits.push(T('Гром — защитник'));
+    byId('flock-progress').textContent=recruits.length?recruits.join(' · '):T('Спасай голубей в заказах, чтобы расширить стаю.');
+    const c=byId('nest-art').getContext('2d');c.clearRect(0,0,280,92);c.imageSmoothingEnabled=false;
+    c.fillStyle='#524852';c.fillRect(10,75,260,8);c.fillStyle='#997365';c.fillRect(10,75,260,2);
+    sprite(c,'nest',140,76,3);sprite(c,'pigeon',100,73,2);
+    for(let i=0;i<recruits.length;i++)sprite(c,'ally',174+i*32,74,1.5,{variant:i});
+    if(save.upgrades.nest>0){c.fillStyle='#ead5ab';c.fillRect(132,62,7,5);c.fillRect(143,60,7,5);}
+    if(save.upgrades.nest>1){c.fillStyle='#788e80';c.fillRect(93,22,98,8);c.fillRect(96,29,4,46);c.fillRect(183,29,4,46);}
+    showSaveError();
+  }
+  byId('open-nest').addEventListener('click',async()=>{await PROGRESS.ready;open('nest');});
+  byId('board-nest').addEventListener('click',()=>show('nest'));
+  byId('nest-orders').addEventListener('click',()=>show('board'));
+  for(const id of ['board-home','nest-home'])byId(id).addEventListener('click',()=>show('menu'));
+  byId('launch-order').addEventListener('click',()=>{
+    if(!PROGRESS.unlocked(selected)) return;
+    activeMission=selected;startRun();
+  });
+  byId('next-order').addEventListener('click',()=>{selected=PROGRESS.next();show('board');});
+  window.addEventListener('progress-changed',()=>{
+    showSaveError();
+    if(screen==='board')renderBoard();
+    if(screen==='nest')renderNest();
+  });
+  byId('language').value=I18N.language();
+  byId('language').addEventListener('change',()=>{
+    I18N.set(byId('language').value);
+    if(screen==='board')renderBoard();
+    if(screen==='nest')renderNest();
+  });
+  I18N.capture();
+  PROGRESS.ready.then(showSaveError);
   drawTitle();
   applySettings();
   show('menu',false);
